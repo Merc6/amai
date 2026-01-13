@@ -96,13 +96,13 @@ mod tests {
         use std::time::Instant;
         let constants = [Value::from_int(5), Value::from_int(3)];
         let bytecode = [
-            LOAD, 0, 0, 0,
-            LOAD, 1, 1, 0,
-            IADD, 2, 0, 1,
-            HALT, 0, 0, 0,
+            LOAD as u32,
+            LOAD as u32 | 0x00010100,
+            IADD as u32 | 0x01000200,
+            HALT as u32,
         ];
         
-        let mut vm = AmaiVM::new(&constants);
+        let mut vm = AmaiVM::new(&constants, false);
         vm.add_function(&bytecode, 2);
         vm.call_function(0);
         let start = Instant::now();
@@ -127,13 +127,13 @@ mod tests {
     fn zdiv() {
         let constants = [Value::from_int(5), Value::from_int(0)];
         let bytecode = [
-            LOAD, 0, 0, 0,
-            LOAD, 1, 1, 0,
-            IDIV, 2, 0, 1,
-            HALT, 0, 0, 0,
+            LOAD as u32,
+            LOAD as u32 | 0x00010100,
+            IDIV as u32 | 0x01000200,
+            HALT as u32,
         ];
         
-        let mut vm = AmaiVM::new(&constants);
+        let mut vm = AmaiVM::new(&constants, false);
         vm.add_function(&bytecode, 2);
         vm.call_function(0);
         let result = vm.run();
