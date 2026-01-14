@@ -1,6 +1,6 @@
 pub mod types;
 
-use std::collections::HashMap;
+use std::{collections::HashMap, path::PathBuf};
 use crate::{common::Span, diagnostic::Diagnostic, parser::{ast::*, ftypes::*}};
 use types::*;
 
@@ -12,16 +12,17 @@ pub struct Symbol {
     defined_at: Span,
 }
 
-pub struct SemanticChecker<'t> {
-    ast: &'t AmaiASTModule,
+pub struct SemanticChecker {
+    path: PathBuf,
     symbols: Vec<HashMap<String, Symbol>>,
     type_registry: HashMap<String, Type>,
 }
 
-impl<'t> SemanticChecker<'t> {
-    pub fn new(ast: &'t AmaiASTModule) -> SemanticChecker<'t> {
+impl SemanticChecker {
+    pub fn new(path: PathBuf) -> Self {
         let mut t = SemanticChecker {
-            ast, symbols: vec![HashMap::new()],
+            path,
+            symbols: vec![HashMap::new()],
             type_registry: HashMap::new()
         };
 
@@ -41,7 +42,9 @@ impl<'t> SemanticChecker<'t> {
         is_unitialized: bool,
         defined_at: Span,
     ) {
-        self.symbols.last_mut().unwrap().insert(name.to_string(), Symbol { ty, mutability, is_unitialized, defined_at });
+        self.symbols.last_mut()
+            .unwrap()
+            .insert(name.to_string(), Symbol { ty, mutability, is_unitialized, defined_at });
     }
 
     pub fn mutate_symbol(
@@ -55,7 +58,7 @@ impl<'t> SemanticChecker<'t> {
                 if !symbol.mutability && !symbol.is_unitialized {
                     return Err(
                         Diagnostic::new(
-                            &self.ast.path,
+                            self.path.display(),
                             format!("Variable `{name}` is immutable"),
                             span,
                         ).with_secondary_message(Some("Variable was defined here:"), symbol.defined_at.clone())
@@ -69,7 +72,7 @@ impl<'t> SemanticChecker<'t> {
                 if symbol.ty != *ty {
                     return Err(
                         Diagnostic::new(
-                            &self.ast.path,
+                            self.path.display(),
                             format!("Variable `{name}` is defined as `{}` but found `{}`", symbol.ty.display(), ty.display()),
                             span,
                         ).with_secondary_message(Some("Variable was defined here:"), symbol.defined_at.clone())
@@ -81,7 +84,7 @@ impl<'t> SemanticChecker<'t> {
 
         return Err(
             Diagnostic::new(
-                &self.ast.path,
+                self.path.display(),
                 format!("Couldn't find variable `{name}` in scope"),
                 span,
             )
@@ -97,7 +100,7 @@ impl<'t> SemanticChecker<'t> {
 
         return Err(
             Diagnostic::new(
-                &self.ast.path,
+                self.path.display(),
                 format!("Couldn't find variable `{name}` in scope"),
                 span,
             )
@@ -107,27 +110,17 @@ impl<'t> SemanticChecker<'t> {
     pub fn resolve_type(&self, ftype: &FrontendType) -> Result<Type, Diagnostic> {
         match &ftype.ty {
             FrontendTypeType::Identifier(ident) => self.type_registry.get(ident).cloned()
-                .ok_or(Diagnostic::new(&self.ast.path, format!("Cannot identifier type `{}`", ident), ftype.span)),
+                .ok_or(Diagnostic::new(self.path.display(), format!("Cannot identifier type `{}`", ident), ftype.span)),
             FrontendTypeType::Unit => Ok(Type::Unit),
             FrontendTypeType::Vector(vec) => Ok(Type::Vector(Box::new(self.resolve_type(vec)?))),
-            FrontendTypeType::Tuple(tup) => {
-                let mut tup_items = Vec::new();
-
-                for ty in tup {
-                    tup_items.push(self.resolve_type(ty)?);
-                }
-
-                Ok(Type::Tuple(tup_items))
-            }
         }
     }
 
-    pub fn validate(&mut self) -> Result<(), Vec<Diagnostic>> {
-        let nodes = self.ast.nodes.clone();
+    pub fn validate(&mut self, ast: &mut ASTModule) -> Result<(), Vec<Diagnostic>> {
         let mut diagnostics = Vec::new();
 
-        for node in nodes {
-            if let Err(diag) = self.validate_node(&node, false) {
+        for node in &mut ast.nodes {
+            if let Err(diag) = self.validate_node(node, false) {
                 diagnostics.extend(diag);
             }
         }
@@ -139,8 +132,8 @@ impl<'t> SemanticChecker<'t> {
         Ok(())
     }
 
-    pub fn validate_node(&mut self, node: &ASTNode, force_exhaustive: bool) -> Result<Type, Vec<Diagnostic>> {
-        match &node.ty {
+    pub fn validate_node(&mut self, node: &mut ASTNode, force_exhaustive: bool) -> Result<Type, Vec<Diagnostic>> {
+        match &mut node.ty {
             ASTNodeType::IntLit(_) => Ok(Type::Int),
             ASTNodeType::FloatLit(_) => Ok(Type::Float),
             ASTNodeType::Boolean(_) => Ok(Type::Bool),
@@ -152,15 +145,6 @@ impl<'t> SemanticChecker<'t> {
                 self.validate_node(stmt, false)?;
                 Ok(Type::Unit)
             },
-            ASTNodeType::Tuple(items) => {
-                let mut item_tys = Vec::new();
-
-                for i in items {
-                    item_tys.push(self.validate_node(i, true)?);
-                }
-
-                Ok(Type::Tuple(item_tys))
-            },
             ASTNodeType::Block(stmts) => {
                 let mut last_ty = Type::Unit;
 
@@ -171,7 +155,7 @@ impl<'t> SemanticChecker<'t> {
                 Ok(last_ty)
             },
             ASTNodeType::Unit => Ok(Type::Unit),
-            ASTNodeType::BinaryOp { op, lhs, rhs } => {
+            ASTNodeType::BinaryOp { op, lhs, rhs, op_tys } => {
                 match &lhs.ty {
                     ASTNodeType::Identifier(s) => {
                         let rhs_ty = self.validate_node(rhs, true)?;
@@ -185,11 +169,12 @@ impl<'t> SemanticChecker<'t> {
                 let rhs_ty = self.validate_node(rhs, true)?;
 
                 if let Some(output) = op.infix_output(&lhs_ty, &rhs_ty) {
+                    *op_tys = Some((lhs_ty, rhs_ty));
                     Ok(output)
                 } else {
                     Err(
                         vec![Diagnostic::new(
-                            &self.ast.path,
+                            self.path.display(),
                             format!(
                                 "Cannot apply `{}` as an infix operator on types `{}` and `{}`",
                                 op.err_str(),
@@ -209,7 +194,7 @@ impl<'t> SemanticChecker<'t> {
                 } else {
                     Err(
                         vec![Diagnostic::new(
-                            &self.ast.path,
+                            self.path.display(),
                             format!(
                                 "Cannot apply `{}` as a unary operator on type `{}`",
                                 op.err_str(),
@@ -234,7 +219,7 @@ impl<'t> SemanticChecker<'t> {
                     if init_ty != var_ty {
                         return Err(
                             vec![Diagnostic::new(
-                                &self.ast.path,
+                                self.path.display(),
                                 format!(
                                     "Variable `{name}` is declared as `{}` but initialized as `{}`",
                                     var_ty.display(),
@@ -277,7 +262,7 @@ impl<'t> SemanticChecker<'t> {
                     if init_ty != var_ty {
                         return Err(
                             vec![Diagnostic::new(
-                                &self.ast.path,
+                                self.path.display(),
                                 format!(
                                     "Variable `{name}` is declared as `{}` but initialized as `{}`",
                                     var_ty.display(),
@@ -308,16 +293,19 @@ impl<'t> SemanticChecker<'t> {
             },
             ASTNodeType::If { condition, then_body, else_body } => {
                 let mut errors = Vec::new();
-                let cond_ty = self.validate_node(condition, true)?;
-                if cond_ty != Type::Bool {
-                    errors.push(
-                        Diagnostic::new(
-                            &self.ast.path,
-                            "Expected boolean condition in `if`",
-                            condition.span.clone(),
-                        )
-                    )
-                }
+                let _ = self.validate_node(condition, true)
+                    .inspect_err(|err| errors.extend(err.clone()))
+                    .inspect(
+                        |ty| if *ty != Type::Bool {
+                            errors.push(
+                                Diagnostic::new(
+                                    self.path.display(),
+                                    "Expected boolean condition in `if`",
+                                    condition.span.clone(),
+                                )
+                            )
+                        }
+                    );
 
                 let then_body_ty = self.validate_node(then_body, force_exhaustive)?;
                 if force_exhaustive {
@@ -327,7 +315,7 @@ impl<'t> SemanticChecker<'t> {
                         if else_body_ty != then_body_ty {
                             errors.push(
                                 Diagnostic::new(
-                                    &self.ast.path,
+                                    self.path.display(),
                                     format!(
                                         "`if`'s clauses has different return types: `{}` and `{}`",
                                         then_body_ty.display(), else_body_ty.display(),
@@ -342,7 +330,7 @@ impl<'t> SemanticChecker<'t> {
                     } else {
                         errors.push(
                             Diagnostic::new(
-                                &self.ast.path,
+                                self.path.display(),
                                 format!(
                                     "Missing `else` clause that evaluates to type `{}`",
                                     then_body_ty.display(),
@@ -362,7 +350,7 @@ impl<'t> SemanticChecker<'t> {
                 if cond_ty != Type::Bool {
                     errors.push(
                         Diagnostic::new(
-                            &self.ast.path,
+                            self.path.display(),
                             "Expected boolean condition in `while`",
                             condition.span.clone(),
                         )

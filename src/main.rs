@@ -1,12 +1,13 @@
 mod lexer;
 mod parser;
 mod semantic_checker;
+mod codegen;
 mod vm;
 mod common;
 mod cli;
 mod diagnostic;
 
-use crate::cli::Cli;
+use crate::cli::{Cli, Command};
 use colored::Colorize;
 
 fn main() {
@@ -21,11 +22,16 @@ fn main() {
 pub fn run_cli(cli: Cli) -> Result<(), String> {
     use std::fs;
 
-    let contents = fs::read_to_string(&cli.input)
-        .map_err(|_| format!("{}: No such file: {}", "error".bright_red().bold(), cli.input))?
+    let input = if let Command::Run { input } = cli.command {
+        input.ok_or(format!("{}: Project runs are not supported yet", "error".bright_red().bold()))?
+    } else {
+        return Err(format!("{}: Unsupported command", "error".bright_red().bold()))
+    };
+    let contents = fs::read_to_string(&input)
+        .map_err(|_| format!("{}: No such file: `{}`", "error".bright_red().bold(), input.italic()))?
         .replace("\r\n", "\n");
 
-    let tokens = match lexer::lex(&cli.input, &contents) {
+    let tokens = match lexer::lex(&input, &contents) {
         Ok(toks) => toks,
         Err(err) => {
             let lines = contents.lines().collect::<Vec<_>>();
@@ -34,16 +40,8 @@ pub fn run_cli(cli: Cli) -> Result<(), String> {
         },
     };
 
-    if cli.debug {
-        let debug_toks = tokens
-            .iter()
-            .map(|tok| tok.fmt_span())
-            .collect::<Vec<_>>();
-        eprintln!("Tokens: {debug_toks:#?}");
-    }
-
-    let mut parser = parser::Parser::new(&cli.input, &tokens);
-    let ast = match parser.parse() {
+    let mut parser = parser::Parser::new(&input, &tokens);
+    let mut ast = match parser.parse() {
         Ok(ast) => ast,
         Err(err) => {
             let lines = contents.lines().collect::<Vec<_>>();
@@ -57,13 +55,9 @@ pub fn run_cli(cli: Cli) -> Result<(), String> {
         },
     };
 
-    if cli.debug {
-        eprintln!("AST: {:#?}", ast.nodes);
-    }
+    let mut sch = semantic_checker::SemanticChecker::new(ast.path.clone());
 
-    let mut sch = semantic_checker::SemanticChecker::new(&ast);
-
-    sch.validate().map_err(|errors| {
+    sch.validate(&mut ast).map_err(|errors| {
         let lines = contents.lines().collect::<Vec<_>>();
         let line_starts = line_starts(&contents);
         errors
@@ -71,6 +65,15 @@ pub fn run_cli(cli: Cli) -> Result<(), String> {
             .map(|d| d.display(&line_starts, &lines))
             .collect::<Vec<_>>().join("\n")
     })?;
+
+    /*
+    let mut bcg = codegen::BytecodeGenerator::new(&ast);
+    let main_id = bcg.generate();
+    let mut vm = bcg.prepare_vm();
+
+    vm.call_function(main_id);
+    vm.run().map_err(|err| format!("{}: {err}", "error".bright_red().bold()))?;
+    vm.return_function();*/
 
     Ok(())
 }
@@ -85,58 +88,4 @@ fn line_starts(s: &str) -> Vec<usize> {
     }
 
     indices
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::vm::{AmaiVM, value::Value, inst::*};
-
-    #[test]
-    fn benchmark() {
-        use std::time::Instant;
-        let constants = [Value::from_int(5), Value::from_int(3)];
-        let bytecode = [
-            LOAD as u32,
-            LOAD as u32 | 0x00010100,
-            IADD as u32 | 0x01000200,
-            HALT as u32,
-        ];
-        
-        let mut vm = AmaiVM::new(&constants, false);
-        vm.add_function(&bytecode, 2);
-        vm.call_function(0);
-        let start = Instant::now();
-        for _ in 0..1_000_000 {
-            vm.run().expect("Runtime error");
-            vm.frames.last_mut().unwrap().ip = vm.frames.last_mut().unwrap().function.bytecode.as_ptr();
-        }
-        let elapsed = start.elapsed();
-        println!("AmaiVM: 1M iterations: {:?} ({:?} per iteration)", 
-                elapsed, elapsed / 1_000_000);
-
-        let start = Instant::now();
-        for _ in 0..1_000_000 {
-            let _result = 5 + 3;
-        }
-        let elapsed = start.elapsed();
-        println!("Rust: 1M iterations: {:?} ({:?} per iteration)", 
-                elapsed, elapsed / 1_000_000);
-    }
-
-    #[test]
-    fn zdiv() {
-        let constants = [Value::from_int(5), Value::from_int(0)];
-        let bytecode = [
-            LOAD as u32,
-            LOAD as u32 | 0x00010100,
-            IDIV as u32 | 0x01000200,
-            HALT as u32,
-        ];
-        
-        let mut vm = AmaiVM::new(&constants, false);
-        vm.add_function(&bytecode, 2);
-        vm.call_function(0);
-        let result = vm.run();
-        assert_eq!(result, Err("Division by zero"));
-    }
 }

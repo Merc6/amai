@@ -1,7 +1,7 @@
 #[derive(Debug, Clone, PartialEq)]
 pub enum Type {
     Int, Float, String, Bool, Unit, Unknown,
-    Vector(Box<Type>), Tuple(Vec<Type>),
+    Vector(Box<Type>),
 }
 
 impl Type {
@@ -14,7 +14,6 @@ impl Type {
             Type::Unit => "()".to_string(),
             Type::Unknown => "{unknown}".to_string(),
             Type::Vector(ty) => format!("[{}]", ty.display()),
-            Type::Tuple(ty) => format!("({})", ty.iter().map(|s| format!("{}, ", s.display())).collect::<Vec<_>>().join("")),
         }
     }
 }

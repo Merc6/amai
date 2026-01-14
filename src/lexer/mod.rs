@@ -67,6 +67,9 @@ fn classify<'lex>(lex: &'lex str, span: Span) -> Option<Token<'lex>> {
         "return" => (TokenType::Return, None),
         "extern" => (TokenType::Extern, None),
         "export" => (TokenType::Export, None),
+        "do" => (TokenType::Do, None),
+        "then" => (TokenType::Then, None),
+        "with" => (TokenType::With, None),
         "true" => (TokenType::True, None),
         "false" => (TokenType::False, None),
         "(" => (TokenType::LParen, None),
@@ -131,7 +134,7 @@ fn classify<'lex>(lex: &'lex str, span: Span) -> Option<Token<'lex>> {
     })
 }
 
-pub fn lex<'lex>(path: &str, source: &'lex str) -> Result<Vec<Token<'lex>>, Diagnostic> {
+pub fn lex<'lex>(path: &str, source: &'lex str) -> Result<Box<[Token<'lex>]>, Diagnostic> {
     let mut chars = source.char_indices().peekable();
     let len = source.len();
 
@@ -202,81 +205,13 @@ pub fn lex<'lex>(path: &str, source: &'lex str) -> Result<Vec<Token<'lex>>, Diag
                 if ch == '.' {
                     if (&source[tok_start..pos]).chars().all(|c| c.is_ascii_digit() || c == '_') {
                         continue
-                    } else if tok_start == pos-1 && pos+1 < len {
+                    } else if tok_start == pos && pos+1 < len {
                         if ch.is_ascii_digit() {
                             continue
                         }
                     }
                 }
-                if ch == '/' {
-                    if let Some((_, '/')) = chars.peek() {
-                        if tok_start < pos {
-                            let tok = classify(&source[tok_start..pos], Span::from(tok_start..pos));
-                            if let Some(tok) = tok {
-                                tokens.push(tok);
-                            } else {
-                                return Err(
-                                    Diagnostic::new(
-                                        path,
-                                        format!("Unrecognized sequence of characters: `{:?}`", &source[tok_start..pos]),
-                                        Span::from(tok_start..pos)
-                                    )
-                                );
-                            }
-                        }
-                        chars.next();
-                        let (mut pos, mut ch) = chars.next().unwrap();
-                        while pos < len {
-                            if ch == '\n' { break }
-                            (pos, ch) = chars.next().unwrap();
-                        }
-                        let (pos, _) = chars.next().unwrap();
-                        tok_start = pos;
-                        continue;
-                    }
-                    if let Some((_, '*')) = chars.peek() {
-                        if tok_start < pos {
-                            let tok = classify(&source[tok_start..pos], Span::from(tok_start..pos));
-                            if let Some(tok) = tok {
-                                tokens.push(tok);
-                            } else {
-                                return Err(
-                                    Diagnostic::new(
-                                        path,
-                                        format!("Unrecognized sequence of characters: `{:?}`", &source[tok_start..pos]),
-                                        Span::from(tok_start..pos)
-                                    )
-                                );
-                            }
-                            tok_start = pos;
-                        }
-                        chars.next();
-                        let (mut pos, mut ch) = chars.next().unwrap();
-                        let mut terminated = false;
-                        while pos < len {
-                            if ch == '*' {
-                                if let Some((_, '/')) = chars.peek() {
-                                    terminated = true;
-                                    chars.next();
-                                    (pos, _) = chars.next().unwrap();
-                                    break
-                                }
-                            }
-                            (pos, ch) = chars.next().unwrap();
-                        }
-                        if !terminated {
-                            return Err(
-                                Diagnostic::new(
-                                    path,
-                                    format!("Unterminated block comment"),
-                                    Span::from(tok_start..pos)
-                                )
-                            );
-                        }
-                        tok_start = pos+1;
-                        continue;
-                    }
-                }
+
                 if tok_start < pos {
                     let tok = classify(&source[tok_start..pos], Span::from(tok_start..pos));
                     if let Some(tok) = tok {
@@ -294,6 +229,44 @@ pub fn lex<'lex>(path: &str, source: &'lex str) -> Result<Vec<Token<'lex>>, Diag
 
                 tok_start = pos;
 
+                if ch == '/' {
+                    if let Some((_, '/')) = chars.peek() {
+                        chars.next();
+                        let mut pos = 0;
+                        while let Some((p, ch)) = chars.next() {
+                            if ch == '\n' { pos = p; break }
+                        }
+                        tok_start = pos+1;
+                        continue;
+                    }
+                    if let Some((_, '*')) = chars.peek() {
+                        chars.next();
+                        let mut terminated = false;
+                        let mut pos = 0;
+                        while let Some((p, ch)) = chars.next() {
+                            if ch == '*' {
+                                if let Some((_, '/')) = chars.peek() {
+                                    terminated = true;
+                                    chars.next();
+                                    pos = p;
+                                    break
+                                }
+                            }
+                        }
+                        if !terminated {
+                            return Err(
+                                Diagnostic::new(
+                                    path,
+                                    format!("Unterminated block comment"),
+                                    Span::from(tok_start..pos+1)
+                                )
+                            );
+                        }
+                        tok_start = pos+1;
+                        continue;
+                    }
+                }
+
                 let mut continue_main_loop = false;
                 for symbol in MULTICHAR_SYMBOLS {
                     if pos + symbol.len() - 1 >= len {
@@ -307,8 +280,8 @@ pub fn lex<'lex>(path: &str, source: &'lex str) -> Result<Vec<Token<'lex>>, Diag
                             &source[tok_start..(pos + symbol.len())],
                             Span::from(tok_start..(pos + symbol.len()))
                         ).unwrap());
-                        skip = symbol.len();
-                        tok_start = pos;
+                        skip = symbol.len() - 1;
+                        tok_start = pos + symbol.len();
                         continue_main_loop = true;
                         break;
                     }
@@ -351,5 +324,5 @@ pub fn lex<'lex>(path: &str, source: &'lex str) -> Result<Vec<Token<'lex>>, Diag
         }
     }
 
-    Ok(tokens)
+    Ok(tokens.into_boxed_slice())
 }

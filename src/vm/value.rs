@@ -1,4 +1,4 @@
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Hash, Eq)]
 pub struct Value(u64);
 
 #[allow(unused)]
@@ -189,6 +189,14 @@ impl Value {
     #[inline(always)]
     pub fn fcle(&self, other: Self) -> Self {
         Self::from_bool(self.to_float() <= other.to_float())
+    }
+    #[inline(always)]
+    pub fn ineg(&self) -> Self {
+        Self::from_int(-self.to_int())
+    }
+    #[inline(always)]
+    pub fn fneg(&self) -> Self {
+        Self::from_float(-self.to_float())
     }
 }
 

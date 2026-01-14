@@ -5,7 +5,7 @@ use std::fmt;
 pub enum TokenType {
     IntLit, FloatLit, StringLit, Operator(Operator),
     Identifier,
-    Func, Let, Var, If, Else, While, For, In, Return, Extern, Export,
+    Func, Let, Var, If, Else, While, For, In, Return, Extern, Export, Do, Then, With,
     True, False,
     LParen, RParen, LSquare, RSquare, LCurly, RCurly,
     Semicolon, Colon, Comma, Dot, QuestionMark, Hashtag,
@@ -30,6 +30,9 @@ impl TokenType {
             Self::Return => "keyword `return`".to_string(),
             Self::Extern => "keyword `extern`".to_string(),
             Self::Export => "keyword `export`".to_string(),
+            Self::Do => "keyword `do`".to_string(),
+            Self::Then => "keyword `then`".to_string(),
+            Self::With => "keyword `with`".to_string(),
             Self::True => "boolean `true`".to_string(),
             Self::False => "boolean `false`".to_string(),
             Self::Operator(op) => format!("`{}`", op.err_str()),
@@ -60,10 +63,6 @@ pub struct Token<'tk> {
 }
 
 impl Token<'_> {
-    pub fn fmt_span(&self) -> String {
-        format!("({:?}){:?}", self.span, self)
-    }
-
     pub fn err_str(&self) -> String {
         match self.ty {
             TokenType::IntLit => format!("integer `{}`", unsafe { self.lit.unwrap().int_num }),

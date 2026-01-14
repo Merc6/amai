@@ -1,10 +1,12 @@
-use crate::common::*;
+use std::path::PathBuf;
+
+use crate::{common::*, semantic_checker::types::Type};
 use super::ftypes::FrontendType;
 
 #[derive(Debug, Clone)]
-pub struct AmaiASTModule {
-    pub path: String,
-    pub nodes: Vec<ASTNode>,
+pub struct ASTModule {
+    pub path: PathBuf,
+    pub nodes: Box<[ASTNode]>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -14,13 +16,13 @@ pub enum ASTNodeType {
     Boolean(bool),
     Identifier(String),
     Semi(Box<ASTNode>),
-    Tuple(Vec<ASTNode>),
     Block(Vec<ASTNode>),
     Unit,
     BinaryOp {
         op: Operator,
         lhs: Box<ASTNode>,
         rhs: Box<ASTNode>,
+        op_tys: Option<(Type, Type)>,
     },
     UnaryOp {
         op: Operator,

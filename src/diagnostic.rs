@@ -16,9 +16,9 @@ fn determine_line(line_starts: &[usize], pos: usize) -> usize {
 }
 
 impl Diagnostic {
-    pub fn new<P: AsRef<str>, M: AsRef<str>>(path: P, primary_err: M, primary_span: Span) -> Diagnostic {
+    pub fn new<P: ToString, M: AsRef<str>>(path: P, primary_err: M, primary_span: Span) -> Diagnostic {
         Diagnostic {
-            path: path.as_ref().to_string(),
+            path: path.to_string(),
             primary_err: primary_err.as_ref().to_string(),
             primary_span,
             secondary_messages: Vec::new(),
@@ -45,8 +45,8 @@ impl Diagnostic {
 
         output.push_str(&format!("{}: {}\n", "error".bright_red().bold(), self.primary_err));
         output.push_str(
-            &format!("{}{} {}:{}:{}\n", " ".repeat(digits_len as usize + 1), "┌──".cyan().bold(),
-            self.path, start_line + 1, start_col + 1)
+            &format!("{}{} {}\n", " ".repeat(digits_len as usize + 1), "┌──".cyan().bold(),
+            format!("{}:{}:{}", self.path, start_line + 1, start_col + 1).italic())
         );
         output.push_str(&format!("{:w$} {}\n", " ", "│".cyan().bold(), w = digits_len as usize));
 

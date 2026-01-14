@@ -1,4 +1,3 @@
-// NOTE: This ISA is more codegen-oriented, so there isn't any dedicated comparative jumps
 pub const NOP: u8  = 0x00;
 pub const LOAD: u8 = 0x01;
 pub const IADD: u8 = 0x02;
@@ -33,4 +32,7 @@ pub const JITR: u8 = 0x1E; // jump if true
 pub const JIFL: u8 = 0x1F; // jump if false
 pub const CALL: u8 = 0x20;
 pub const RETN: u8 = 0x21;
+pub const INEG: u8 = 0x22;
+pub const FNEG: u8 = 0x23;
+pub const MOVE: u8 = 0x24;
 pub const HALT: u8 = 0xFF;

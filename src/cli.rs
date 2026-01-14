@@ -2,14 +2,18 @@ use clap::Parser;
 
 #[derive(Debug, Parser)]
 #[command(
-    name = "amaii",
-    bin_name = "amaii",
-    about = "The Amai interpreter/VM",
+    name = "amai",
+    bin_name = "amai",
+    about = "The Amai toolchain",
 )]
 pub struct Cli {
-    #[arg(required = true, num_args = 1..)]
-    pub input: String,
+    #[command(subcommand)]
+    pub command: Command,
+}
 
-    #[arg(short, long)]
-    pub debug: bool,
+#[derive(Debug, Parser)]
+pub enum Command {
+    Run {
+        input: Option<String>,
+    }
 }

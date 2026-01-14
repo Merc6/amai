@@ -4,7 +4,6 @@ use crate::common::Span;
 pub enum FrontendTypeType {
     Identifier(String),
     Vector(Box<FrontendType>),
-    Tuple(Vec<FrontendType>),
     Unit,
 }
 
