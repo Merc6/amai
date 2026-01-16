@@ -55,7 +55,7 @@ impl SemanticChecker {
     ) -> Result<(), Diagnostic> {
         for scope in self.symbols.iter_mut().rev() {
             if let Some(symbol) = scope.get_mut(name) {
-                if !symbol.mutability && !symbol.is_unitialized {
+                if !symbol.mutability || !symbol.is_unitialized {
                     return Err(
                         Diagnostic::new(
                             self.path.display(),
@@ -172,8 +172,7 @@ impl SemanticChecker {
                             let sym = self
                                 .find_symbol(s, node.span)
                                 .map_err(|err| vec![err])?.clone();
-                            if *op != Operator::Assign && ![Type::Int, Type::Float].contains(&sym.ty)
-                            {
+                            if *op != Operator::Assign && ![Type::Int, Type::Float].contains(&sym.ty) {
                                 return Err(
                                     vec![Diagnostic::new(
                                         self.path.display(),

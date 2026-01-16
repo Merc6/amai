@@ -36,28 +36,36 @@ impl Value {
     }
 
     #[inline(always)]
-    pub fn iadd(&self, other: Self) -> Self {
-        Self::from_int(self.to_int() + other.to_int())
+    pub fn iadd(&self, other: Self) -> Result<Self, String> {
+        let lhs = self.to_int();
+        let rhs = other.to_int();
+        Ok(Self::from_int(lhs.checked_add(rhs).ok_or(format!("Addition overflow (left: {lhs}, right: {rhs})"))?))
     }
     #[inline(always)]
-    pub fn isub(&self, other: Self) -> Self {
-        Self::from_int(self.to_int() - other.to_int())
+    pub fn isub(&self, other: Self) -> Result<Self, String> {
+        let lhs = self.to_int();
+        let rhs = other.to_int();
+        Ok(Self::from_int(lhs.checked_sub(rhs).ok_or(format!("Subtraction overflow (left: {lhs}, right: {rhs})"))?))
     }
     #[inline(always)]
-    pub fn imul(&self, other: Self) -> Self {
-        Self::from_int(self.to_int() * other.to_int())
+    pub fn imul(&self, other: Self) -> Result<Self, String> {
+        let lhs = self.to_int();
+        let rhs = other.to_int();
+        Ok(Self::from_int(self.to_int().checked_mul(other.to_int()).ok_or(format!("Multiplication overflow (left: {lhs}, right: {rhs})"))?))
     }
     #[inline(always)]
-    pub fn idiv(&self, other: Self) -> Option<Self> {
-        let o = other.to_int();
-        if o == 0 { return None }
-        Some(Self::from_int(self.to_int() / o))
+    pub fn idiv(&self, other: Self) -> Result<Self, String> {
+        let lhs = self.to_int();
+        let rhs = other.to_int();
+        if rhs == 0 { return Err(String::from("Division by zero (left: {lhs}, right: {rhs})")) }
+        Ok(Self::from_int(lhs.checked_div(rhs).ok_or(format!("Division overflow (left: {lhs}, right: {rhs})"))?))
     }
     #[inline(always)]
-    pub fn irem(&self, other: Self) -> Option<Self> {
-        let o = other.to_int();
-        if o == 0 { return None }
-        Some(Self::from_int(self.to_int() % o))
+    pub fn irem(&self, other: Self) -> Result<Self, String> {
+        let lhs = self.to_int();
+        let rhs = other.to_int();
+        if rhs == 0 { return Err(format!("Division by zero (left: {lhs}, right: {rhs})")) }
+        Ok(Self::from_int(lhs.checked_rem(rhs).ok_or(format!("Remainder overflow (left: {lhs}, right: {rhs})"))?))
     }
     #[inline(always)]
     pub fn fadd(&self, other: Self) -> Self {
@@ -160,11 +168,21 @@ impl Value {
         Self::from_float(-self.to_float())
     }
     #[inline(always)]
-    pub fn lshf(&self, other: Self) -> Self {
-        Self::from_int(self.to_int() << other.to_int())
+    pub fn lshf(&self, other: Self) -> Result<Self, String> {
+        let lhs = self.to_int();
+        let rhs = other.to_int();
+        if rhs < 0 {
+            return Err(format!("Shift left by negative integer (left: {lhs}, right: {rhs})"))
+        }
+        Ok(Self::from_int(lhs.checked_shl(rhs as u32).ok_or(format!("Shift left overflow (left: {lhs}, right: {rhs})"))?))
     }
     #[inline(always)]
-    pub fn rshf(&self, other: Self) -> Self {
-        Self::from_int(self.to_int() >> other.to_int())
+    pub fn rshf(&self, other: Self) -> Result<Self, String> {
+        let lhs = self.to_int();
+        let rhs = other.to_int();
+        if rhs < 0 {
+            return Err(format!("Shift right by negative integer (left: {lhs}, right: {rhs})"))
+        }
+        Ok(Self::from_int(lhs.checked_shr(rhs as u32).ok_or(format!("Shift right overflow (left: {lhs}, right: {rhs})"))?))
     }
 }

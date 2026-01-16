@@ -77,14 +77,19 @@ pub fn run_path(input: &str, show_bytecode: bool) -> Result<(), String> {
     let mut vm = vm::AmaiVM::new(astc.constants(), false);
 
     if show_bytecode {
-        let disassembled = tools::bytecode_disassembler::disassemble(&f);
+        let disassembled = tools::bytecode_disassembler::disassemble(&f.iter().map(|s| s.0).collect::<Vec<_>>());
         println!("{disassembled}");
     }
 
     vm.add_function(f.into_boxed_slice());
     vm.call_function(0, Box::new([]));
     let current = std::time::Instant::now();
-    vm.run().map_err(|err| format!("{}: {err}", "error".bright_red().bold()))?;
+    vm.run().map_err(|(err, span)| {
+        let diag = diagnostic::Diagnostic::new(&input, format!("{err}. Traced error happened here:"), span);
+        let lines = contents.lines().collect::<Vec<_>>();
+        let line_starts = line_starts(&contents);
+        diag.display(&line_starts, &lines)
+    })?;
     println!("Program ended in {:.2}s", current.elapsed().as_secs_f32());
     vm.return_function();
 

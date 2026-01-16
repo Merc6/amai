@@ -51,6 +51,10 @@ fn parse_float(string: &str) -> Option<f64> {
         }
     }
 
+    if !dot_found {
+        return None;
+    }
+
     Some(float)
 }
 

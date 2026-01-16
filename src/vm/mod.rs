@@ -9,6 +9,8 @@ use inst::*;
 use function::Function;
 use call_frame::CallFrame;
 
+use crate::common::Span;
+
 pub struct AmaiVM {
     pub frames: Vec<CallFrame>,
     pub constants: Box<[Value]>,
@@ -30,6 +32,7 @@ impl AmaiVM {
         }
     }
 
+    #[allow(unused)]
     pub fn add_extern_fn<F: Fn(&mut AmaiVM, &[Value]) + 'static>(&mut self, f: F) -> u32 {
         self.external_functions.push(Rc::new(f));
         self.external_functions.len() as u32 - 1
@@ -37,7 +40,7 @@ impl AmaiVM {
 
     
     #[inline(always)]
-    pub fn add_function(&mut self, bytecode: Box<[u32]>) -> usize {
+    pub fn add_function(&mut self, bytecode: Box<[(u32, Span)]>) -> usize {
         if !self.allow_large_bytecode {
             assert!(bytecode.len() < 65536, "Bytecode length is out of jump bounds");
         }
@@ -70,7 +73,7 @@ impl AmaiVM {
         self.frames.pop();
     }
 
-    pub fn run(&mut self) -> Result<(), &'static str> {
+    pub fn run(&mut self) -> Result<(), (String, Span)> {
         self.running = true;
         while self.running {
             unsafe { self.cycle()? }
@@ -81,9 +84,9 @@ impl AmaiVM {
 
     #[inline(always)]
     #[allow(unsafe_op_in_unsafe_fn)]
-    pub unsafe fn cycle(&mut self) -> Result<(), &'static str> {
+    pub unsafe fn cycle(&mut self) -> Result<(), (String, Span)> {
         let frame = self.frames.last_mut().unwrap() as *mut CallFrame;
-        let inst = if let Some(inst) = (&(*frame).function).bytecode.get((*frame).ip) {
+        let (inst, span) = if let Some(inst) = (&(*frame).function).bytecode.get((*frame).ip) {
             inst
         } else {
             self.running = false;
@@ -106,31 +109,31 @@ impl AmaiVM {
                 let src1 = (*frame).registers[((inst >> 16) & 0xFF) as usize];
                 let src2 = (*frame).registers[((inst >> 24) & 0xFF) as usize];
 
-                (*frame).registers[((inst >> 8) & 0xFF) as usize] = src1.iadd(src2);
+                (*frame).registers[((inst >> 8) & 0xFF) as usize] = src1.iadd(src2).map_err(|err| (err, *span))?;
             },
             ISUB => {
                 let src1 = (*frame).registers[((inst >> 16) & 0xFF) as usize];
                 let src2 = (*frame).registers[((inst >> 24) & 0xFF) as usize];
 
-                (*frame).registers[((inst >> 8) & 0xFF) as usize] = src1.isub(src2);
+                (*frame).registers[((inst >> 8) & 0xFF) as usize] = src1.isub(src2).map_err(|err| (err, *span))?;
             },
             IMUL => {
                 let src1 = (*frame).registers[((inst >> 16) & 0xFF) as usize];
                 let src2 = (*frame).registers[((inst >> 24) & 0xFF) as usize];
 
-                (*frame).registers[((inst >> 8) & 0xFF) as usize] = src1.imul(src2);
+                (*frame).registers[((inst >> 8) & 0xFF) as usize] = src1.imul(src2).map_err(|err| (err, *span))?;
             },
             IDIV => {
                 let src1 = (*frame).registers[((inst >> 16) & 0xFF) as usize];
                 let src2 = (*frame).registers[((inst >> 24) & 0xFF) as usize];
 
-                (*frame).registers[((inst >> 8) & 0xFF) as usize] = src1.idiv(src2).ok_or("Division by zero")?;
+                (*frame).registers[((inst >> 8) & 0xFF) as usize] = src1.idiv(src2).map_err(|err| (err, *span))?;
             },
             IREM => {
                 let src1 = (*frame).registers[((inst >> 16) & 0xFF) as usize];
                 let src2 = (*frame).registers[((inst >> 24) & 0xFF) as usize];
 
-                (*frame).registers[((inst >> 8) & 0xFF) as usize] = src1.irem(src2).ok_or("Division by zero")?;
+                (*frame).registers[((inst >> 8) & 0xFF) as usize] = src1.irem(src2).map_err(|err| (err, *span))?;
             },
             FADD => {
                 let src1 = (*frame).registers[((inst >> 16) & 0xFF) as usize];
@@ -154,13 +157,13 @@ impl AmaiVM {
                 let src1 = (*frame).registers[((inst >> 16) & 0xFF) as usize];
                 let src2 = (*frame).registers[((inst >> 24) & 0xFF) as usize];
 
-                (*frame).registers[((inst >> 8) & 0xFF) as usize] = src1.fdiv(src2).ok_or("Division by zero")?;
+                (*frame).registers[((inst >> 8) & 0xFF) as usize] = src1.fdiv(src2).ok_or(("Division by zero".to_string(), *span))?;
             },
             FREM => {
                 let src1 = (*frame).registers[((inst >> 16) & 0xFF) as usize];
                 let src2 = (*frame).registers[((inst >> 24) & 0xFF) as usize];
 
-                (*frame).registers[((inst >> 8) & 0xFF) as usize] = src1.frem(src2).ok_or("Division by zero")?;
+                (*frame).registers[((inst >> 8) & 0xFF) as usize] = src1.frem(src2).ok_or(("Division by zero".to_string(), *span))?;
             },
             BOR => {
                 let src1 = (*frame).registers[((inst >> 16) & 0xFF) as usize];
@@ -337,13 +340,13 @@ impl AmaiVM {
                 let src1 = (*frame).registers[((inst >> 16) & 0xFF) as usize];
                 let src2 = (*frame).registers[((inst >> 24) & 0xFF) as usize];
 
-                (*frame).registers[((inst >> 8) & 0xFF) as usize] = src1.lshf(src2);
+                (*frame).registers[((inst >> 8) & 0xFF) as usize] = src1.lshf(src2).map_err(|err| (err, *span))?;
             },
             RSHF => {
                 let src1 = (*frame).registers[((inst >> 16) & 0xFF) as usize];
                 let src2 = (*frame).registers[((inst >> 24) & 0xFF) as usize];
 
-                (*frame).registers[((inst >> 8) & 0xFF) as usize] = src1.rshf(src2);
+                (*frame).registers[((inst >> 8) & 0xFF) as usize] = src1.rshf(src2).map_err(|err| (err, *span))?;
             },
             HALT => self.running = false,
             _ => panic!("Unknown opcode: {opcode:#04X}"),
