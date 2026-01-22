@@ -197,7 +197,7 @@ impl Value {
         Ok(Self::from_int(lhs.checked_shr(rhs as u32).ok_or(format!("Shift right overflow (left: {lhs}, right: {rhs})"))?))
     }
     #[inline(always)]
-    pub fn scon(&self, other: Self, arena: &mut Arena) -> Result<Self, String> {
+    pub fn scon(&self, other: Self, arena: &mut Arena) -> Self {
         let lhs_addr = self.0 as usize;
         let rhs_addr = other.0 as usize;
         let lhs_size = u32::from_le_bytes(
@@ -217,6 +217,42 @@ impl Value {
         arena.write(addr + 4, &lhs_data);
         let rhs_data = arena.fetch(rhs_addr + 4, rhs_size).to_vec();
         arena.write(addr + 4 + lhs_size, &rhs_data);
-        Ok(Self::from_ptr(addr))
+        Self::from_ptr(addr)
+    }
+    #[inline(always)]
+    pub fn sceq(&self, other: Self, arena: &mut Arena) -> Self {
+        let lhs_addr = self.0 as usize;
+        let rhs_addr = other.0 as usize;
+        let lhs_size = u32::from_le_bytes(
+            arena.fetch(lhs_addr, 4)
+            .try_into()
+            .unwrap()
+        ) as usize;
+        let rhs_size = u32::from_le_bytes(
+            arena.fetch(rhs_addr, 4)
+            .try_into()
+            .unwrap()
+        ) as usize;
+        let lhs_data = arena.fetch(lhs_addr + 4, lhs_size);
+        let rhs_data = arena.fetch(rhs_addr + 4, rhs_size);
+        Self::from_bool(lhs_data == rhs_data)
+    }
+    #[inline(always)]
+    pub fn scne(&self, other: Self, arena: &mut Arena) -> Self {
+        let lhs_addr = self.0 as usize;
+        let rhs_addr = other.0 as usize;
+        let lhs_size = u32::from_le_bytes(
+            arena.fetch(lhs_addr, 4)
+            .try_into()
+            .unwrap()
+        ) as usize;
+        let rhs_size = u32::from_le_bytes(
+            arena.fetch(rhs_addr, 4)
+            .try_into()
+            .unwrap()
+        ) as usize;
+        let lhs_data = arena.fetch(lhs_addr + 4, lhs_size);
+        let rhs_data = arena.fetch(rhs_addr + 4, rhs_size);
+        Self::from_bool(lhs_data != rhs_data)
     }
 }

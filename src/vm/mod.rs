@@ -17,7 +17,7 @@ pub struct AmaiVM {
     pub frames: Vec<CallFrame>,
     pub constants: Box<[Value]>,
     pub running: bool,
-    pub functions: Vec<Rc<Function>>,
+    pub functions: Vec<(Rc<Function>, [Value; 64])>,
     pub allow_large_bytecode: bool,
     pub external_functions: Vec<Rc<dyn Fn(&mut AmaiVM, &[Value])>>,
     pub arena: Arena,
@@ -36,7 +36,7 @@ impl AmaiVM {
         }
     }
 
-    pub fn precompile_constants(&mut self, constants: Box<[ValueBuilder]>) {
+    pub fn precompile_constants(&mut self, constants: &[ValueBuilder]) {
         let mut new_constants = Vec::new();
         for value in constants {
             if value.is_large() {
@@ -50,6 +50,20 @@ impl AmaiVM {
         self.constants = new_constants.into_boxed_slice();
     }
 
+    pub fn potentially_alloc(&mut self, values: &[ValueBuilder]) -> Vec<Value> {
+        let mut new_vals = Vec::new();
+        for value in values {
+            if value.is_large() {
+                let addr = self.arena.alloc(value.size(), value.align());
+                self.arena.write(addr, &value.data());
+                new_vals.push(Value::from_ptr(addr));
+            } else {
+                new_vals.push(value.to_value())
+            }
+        }
+        new_vals
+    }
+
     #[allow(unused)]
     pub fn add_extern_fn<F: Fn(&mut AmaiVM, &[Value]) + 'static>(&mut self, f: F) -> u32 {
         self.external_functions.push(Rc::new(f));
@@ -58,24 +72,24 @@ impl AmaiVM {
 
     
     #[inline(always)]
-    pub fn add_function(&mut self, bytecode: Box<[(u32, Span)]>) -> usize {
+    pub fn add_function(&mut self, bytecode: Box<[(u32, Span)]>, registers: &[Value]) -> usize {
         if !self.allow_large_bytecode {
             assert!(bytecode.len() < 65536, "Bytecode length is out of jump bounds");
         }
 
         let func = Function { bytecode };
-        self.functions.push(Rc::new(func));
+        self.functions.push((Rc::new(func), registers.try_into().unwrap()));
         self.functions.len() - 1
     }
 
     #[inline(always)]
     pub fn call_function(&mut self, id: usize, caller_args: Box<[Value]>) {
-        let func = self.functions[id].clone();
+        let (function, registers) = self.functions[id].clone();
         let new_frame = CallFrame {
             caller_args,
             callee_args: Vec::new(),
-            function: func,
-            registers: [Value::nil(); 64],
+            function,
+            registers,
             ip: 0,
         };
         self.frames.push(new_frame);
@@ -88,7 +102,12 @@ impl AmaiVM {
 
     #[inline(always)]
     pub fn return_function(&mut self) {
-        self.frames.pop();
+        if let Some(mut callee_frame) = self.frames.pop() {
+            if let Some(caller_frame) = self.frames.last_mut() {
+                caller_frame.registers[0] 
+                = callee_frame.callee_args.pop().unwrap_or(Value::nil());
+            }
+        }
     }
 
     pub fn run(&mut self) -> Result<(), (String, Span)> {
@@ -317,9 +336,11 @@ impl AmaiVM {
                 }
             },
             CALL => {
-                let id = (inst >> 8) & 0xFFFFFF;
-
-                self.call_function(id as usize, (*frame).callee_args.clone().into_boxed_slice());
+                let id = (inst >> 8) & 0xFF;
+                self.call_function(
+                    (*frame).registers[id as usize].to_ptr(),
+                    (*frame).callee_args.clone().into_boxed_slice(),
+                );
                 (*frame).callee_args.clear();
             },
             RETN => self.return_function(),
@@ -370,7 +391,19 @@ impl AmaiVM {
                 let src1 = (*frame).registers[((inst >> 16) & 0xFF) as usize];
                 let src2 = (*frame).registers[((inst >> 24) & 0xFF) as usize];
 
-                (*frame).registers[((inst >> 8) & 0xFF) as usize] = src1.scon(src2, &mut self.arena).map_err(|err| (err, *span))?;
+                (*frame).registers[((inst >> 8) & 0xFF) as usize] = src1.scon(src2, &mut self.arena);
+            },
+            SCEQ => {
+                let src1 = (*frame).registers[((inst >> 16) & 0xFF) as usize];
+                let src2 = (*frame).registers[((inst >> 24) & 0xFF) as usize];
+
+                (*frame).registers[((inst >> 8) & 0xFF) as usize] = src1.sceq(src2, &mut self.arena);
+            },
+            SCNE => {
+                let src1 = (*frame).registers[((inst >> 16) & 0xFF) as usize];
+                let src2 = (*frame).registers[((inst >> 24) & 0xFF) as usize];
+
+                (*frame).registers[((inst >> 8) & 0xFF) as usize] = src1.scne(src2, &mut self.arena);
             },
             HALT => self.running = false,
             _ => panic!("Unknown opcode: {opcode:#04X}"),

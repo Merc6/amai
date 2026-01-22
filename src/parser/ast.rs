@@ -51,9 +51,13 @@ pub enum ASTNodeType {
     },
     FunDef {
         name: String,
-        args: Vec<(String, Option<FrontendType>, Span)>,
+        params: Vec<(String, FrontendType, Span)>,
         return_ty: Option<FrontendType>,
         body: Box<ASTNode>,
+    },
+    FunCall {
+        callee: String,
+        args: Vec<ASTNode>,
     },
 }
 

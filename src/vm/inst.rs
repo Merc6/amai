@@ -41,4 +41,6 @@ pub const CEXT: u8 = 0x27; // call external
 pub const LSHF: u8 = 0x28;
 pub const RSHF: u8 = 0x29;
 pub const SCON: u8 = 0x2A;
+pub const SCEQ: u8 = 0x2B;
+pub const SCNE: u8 = 0x2C;
 pub const HALT: u8 = 0xFF;

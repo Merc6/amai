@@ -110,20 +110,30 @@ impl SemanticChecker {
     pub fn resolve_type(&self, ftype: &FrontendType) -> Result<Type, Diagnostic> {
         match &ftype.ty {
             FrontendTypeType::Identifier(ident) => self.type_registry.get(ident).cloned()
-                .ok_or(Diagnostic::new(self.path.display(), format!("Cannot identifier type `{}`", ident), ftype.span)),
+                .ok_or(Diagnostic::new(self.path.display(), format!("Cannot find type `{}`", ident), ftype.span)),
             FrontendTypeType::Unit => Ok(Type::Unit),
             FrontendTypeType::Vector(vec) => Ok(Type::Vector(Box::new(self.resolve_type(vec)?))),
         }
     }
     
-    /*fn collect_functions(&mut self, node: &ASTNode) -> Result<(), Diagnostic> {
+    fn collect_functions(&mut self, node: &ASTNode) -> Result<(), Diagnostic> {
         match &node.ty {
-            ASTNodeType::FunDef { name, args, return_ty, body } => {
-                self.define_symbol(name, Type::Func(, ()), mutability, is_unitialized, defined_at);
-            }
+            ASTNodeType::FunDef { name, params, return_ty, body: _ } => {
+                let mut params_ty = Vec::new();
+                for (_, ty, _) in params {
+                    params_ty.push(self.resolve_type(ty)?);
+                }
+                let return_ty = match return_ty {
+                    Some(ty) => Box::new(self.resolve_type(ty)?),
+                    None => Box::new(Type::Unit),
+                };
+                self.define_symbol(name, Type::Func(params_ty, return_ty), false, false, node.span);
+            },
             _ => {},
         }
-    }*/
+
+        Ok(())
+    }
 
     pub fn validate(&mut self, ast: &mut ASTModule) -> Result<(), Vec<Diagnostic>> {
         let mut diagnostics = Vec::new();
@@ -142,6 +152,7 @@ impl SemanticChecker {
     }
 
     pub fn validate_node(&mut self, node: &mut ASTNode, force_exhaustive: bool) -> Result<Type, Vec<Diagnostic>> {
+        self.collect_functions(node).map_err(|err| vec![err])?;
         match &mut node.ty {
             ASTNodeType::IntLit(_) => Ok(Type::Int),
             ASTNodeType::FloatLit(_) => Ok(Type::Float),
@@ -266,7 +277,7 @@ impl SemanticChecker {
                                     var_ty.display(),
                                     init_ty.display(),
                                 ),
-                                node.span.clone(),
+                                i.span.clone(),
                             )]
                         )
                     }
@@ -309,7 +320,7 @@ impl SemanticChecker {
                                     var_ty.display(),
                                     init_ty.display(),
                                 ),
-                                node.span.clone(),
+                                i.span.clone(),
                             )]
                         )
                     }
@@ -398,12 +409,64 @@ impl SemanticChecker {
                     )
                 }
 
+                self.symbols.push(HashMap::new());
                 let _ = self.validate_node(body, force_exhaustive).inspect_err(|err| errors.extend_from_slice(err.as_slice()));
                 if !errors.is_empty() { return Err(errors) }
+                self.symbols.pop();
                 Ok(Type::Unit)
             },
-            ASTNodeType::FunDef { name, args, return_ty, body } => {
-                Ok(Type::Unit)
+            ASTNodeType::FunDef { name, params, return_ty, body } => {
+                let mut scope = HashMap::new();
+                for (name, ty, span) in params {
+                    scope.insert(name.clone(),
+                        Symbol {
+                            ty: self.resolve_type(ty).map_err(|err| vec![err])?,
+                            mutability: false,
+                            is_unitialized: false,
+                            defined_at: *span
+                        });
+                }
+                self.symbols.push(scope);
+                let body_ty = self.validate_node(body, true)?;
+                let return_ty = return_ty.as_ref()
+                    .map(|ty| self.resolve_type(ty))
+                    .unwrap_or(Ok(Type::Unit))
+                    .map_err(|err| vec![err])?;
+                if body_ty != return_ty {
+                    return Err(vec![Diagnostic::new(
+                        self.path.display(),
+                        format!(
+                            "Function `{name}` is declared as a function of return type `{}`, but body returns `{}`",
+                            return_ty.display(),
+                            body_ty.display()
+                        ),
+                        body.span
+                    )]);
+                }
+                self.symbols.pop();
+                Ok(return_ty)
+            },
+            ASTNodeType::FunCall { callee, args } => {
+                let symbol = self.find_symbol(&callee, node.span).map_err(|err| vec![err])?.clone();
+                if let Type::Func(params_ty, ty) = symbol.ty {
+                    for (i, arg) in args.iter_mut().enumerate() {
+                        let arg_ty = self.validate_node(arg, true)?;
+                        if params_ty[i] != arg_ty {
+                            return Err(vec![Diagnostic::new(
+                                self.path.display(),
+                                format!(
+                                    "Function has argument #{i} as type `{}` but found `{}`",
+                                    params_ty[i].display(),
+                                    arg_ty.display()
+                                ),
+                                node.span
+                            )]);
+                        }
+                    }
+                    Ok(*ty)
+                } else {
+                    Err(vec![Diagnostic::new(self.path.display(), format!("Identifier {callee} is not a function"), node.span)])
+                }
             },
         }
     }

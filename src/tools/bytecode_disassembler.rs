@@ -189,8 +189,8 @@ pub fn disassemble(bytecode: &[u32]) -> String {
                 output.push_str(&format!("JIFL {dest} r{src1}\n"));
             },
             CALL => {
-                let func = (inst >> 8) & 0xFFFFFF;
-                output.push_str(&format!("CALL ${func}\n"));
+                let dest = (inst >> 8) & 0xFF;
+                output.push_str(&format!("CALL r{dest}\n"));
             },
             RETN => output.push_str("RETN"),
             INEG => {
@@ -238,6 +238,18 @@ pub fn disassemble(bytecode: &[u32]) -> String {
                 let src1 = ((inst >> 16) & 0xFF) as u8;
                 let src2 = ((inst >> 24) & 0xFF) as u8;
                 output.push_str(&format!("SCON r{dest} r{src1} r{src2}\n"));
+            },
+            SCEQ => {
+                let dest = ((inst >> 8) & 0xFF) as u8;
+                let src1 = ((inst >> 16) & 0xFF) as u8;
+                let src2 = ((inst >> 24) & 0xFF) as u8;
+                output.push_str(&format!("SCEQ r{dest} r{src1} r{src2}\n"));
+            },
+            SCNE => {
+                let dest = ((inst >> 8) & 0xFF) as u8;
+                let src1 = ((inst >> 16) & 0xFF) as u8;
+                let src2 = ((inst >> 24) & 0xFF) as u8;
+                output.push_str(&format!("SCNE r{dest} r{src1} r{src2}\n"));
             },
             HALT => output.push_str("HALT\n"),
             _ => todo!()

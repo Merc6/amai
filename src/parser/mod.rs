@@ -155,10 +155,34 @@ impl<'p> Parser<'p> {
             },
             TokenType::Identifier => {
                 self.pos += 1;
-                Ok(ASTNode {
-                    ty: ASTNodeType::Identifier(token.lex.to_string()),
-                    span: token.span,
-                })
+                if let Some(Token { ty: TokenType::LParen, .. }) = self.tokens.get(self.pos) {
+                    self.pos += 1;
+                    let mut span = token.span;
+                    let mut args = Vec::new();
+                    while let Some(tok) = self.tokens.get(self.pos) {
+                        if tok.ty == TokenType::RParen { break }
+                        let node = self.parse_expr(0)?;
+                        args.push(node);
+                        if self.expect(TokenType::Comma).is_err() {
+                            break
+                        }
+                    }
+                    let s = self.expect(TokenType::RParen)?;
+                    span.end = s.span.end;
+
+                    Ok(ASTNode {
+                        ty: ASTNodeType::FunCall {
+                            callee: token.lex.to_string(),
+                            args,
+                        },
+                        span
+                    })
+                } else {
+                    Ok(ASTNode {
+                        ty: ASTNodeType::Identifier(token.lex.to_string()),
+                        span: token.span,
+                    })
+                }
             },
             TokenType::Operator(op) if op.is_prefix() => {
                 self.pos += 1;
@@ -223,25 +247,22 @@ impl<'p> Parser<'p> {
         stmt_span.end = ident.span.end;
 
         if self.expect(TokenType::LParen).is_ok() {
-            let mut args = Vec::new();
+            let mut params = Vec::new();
             while let Some(tok) = self.tokens.get(self.pos) {
                 if tok.ty == TokenType::RParen { break }
                 let ident = self.expect(TokenType::Identifier)?;
-                let mut arg_span = ident.span;
+                let mut param_span = ident.span;
                 let name = ident.lex.to_string();
-                if self.expect(TokenType::Comma).is_ok() {
-                    let ty = self.parse_type()?;
-                    arg_span.end = ty.span.end;
-                    args.push((name, Some(ty), arg_span));
-                } else {
-                    args.push((name, None, arg_span));
-                }
+                self.expect(TokenType::Colon)?;
+                let ty = self.parse_type()?;
+                param_span.end = ty.span.end;
+                params.push((name, ty, param_span));
                 if self.expect(TokenType::Comma).is_err() {
                     break
                 }
             }
             self.expect(TokenType::RParen)?;
-            let return_ty = if self.expect(TokenType::Comma).is_ok() {
+            let return_ty = if self.expect(TokenType::Colon).is_ok() {
                 Some(self.parse_type()?)
             } else {
                 None
@@ -251,7 +272,7 @@ impl<'p> Parser<'p> {
             stmt_span.end = body.span.end;
 
             return Ok(ASTNode {
-                ty: ASTNodeType::FunDef { name, args, return_ty, body: Box::new(body) },
+                ty: ASTNodeType::FunDef { name, params, return_ty, body: Box::new(body) },
                 span: stmt_span,
             });
         }

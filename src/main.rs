@@ -72,25 +72,38 @@ pub fn run_path(input: &str, show_bytecode: bool) -> Result<(), String> {
     })?;
 
     let mut astc = codegen::ASTCompiler::new();
-    let f = astc.compile(&ast);
+    let (entry_point, functions) = astc.compile(&ast);
     
     if show_bytecode {
-        let disassembled = tools::bytecode_disassembler::disassemble(&f.iter().map(|s| s.0).collect::<Vec<_>>());
-        println!("{disassembled}");
+        for func in &functions {
+            println!("=== {} ===", func.name);
+            let disassembled = tools
+                ::bytecode_disassembler
+                ::disassemble(
+                    &func.body
+                        .iter()
+                        .map(
+                            |s| s.0
+                        ).collect::<Vec<_>>()
+                );
+            println!("{disassembled}\n");
+        }
     }
     
     let mut vm = vm::AmaiVM::new(false);
-    vm.precompile_constants(astc.constants.into_boxed_slice());
+    vm.precompile_constants(&astc.constants);
 
-    vm.add_function(f.into_boxed_slice());
-    vm.call_function(0, Box::new([]));
+    for func in functions {
+        let regs = vm.potentially_alloc(&func.registers);
+        vm.add_function(func.body.into_boxed_slice(), &regs);
+    }
+    vm.call_function(entry_point, Box::new([]));
     vm.run().map_err(|(err, span)| {
         let diag = diagnostic::Diagnostic::new(&input, format!("{err}. Traced error happened here:"), span);
         let lines = contents.lines().collect::<Vec<_>>();
         let line_starts = line_starts(&contents);
         diag.display(&line_starts, &lines)
     })?;
-    let frame = vm.frames.last().unwrap();
     vm.return_function();
 
     Ok(())
