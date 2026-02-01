@@ -5,7 +5,7 @@ use std::fmt;
 pub enum TokenType {
     IntLit, FloatLit, StringLit, Operator(Operator),
     Identifier,
-    Let, Var, If, Else, While, For, In, Return, Extern, Export, Do, Then, With,
+    Let, If, Else, While, For, In, Return, Extern, Export, Do, Then, With,
     True, False,
     LParen, RParen, LSquare, RSquare, LCurly, RCurly,
     Semicolon, Colon, Comma, Dot, QuestionMark, Hashtag,
@@ -20,7 +20,6 @@ impl TokenType {
             Self::StringLit => "string".to_string(),
             Self::Identifier => "identifier".to_string(),
             Self::Let => "keyword `let`".to_string(),
-            Self::Var => "keyword `var`".to_string(),
             Self::If => "keyword `if`".to_string(),
             Self::Else => "keyword `else`".to_string(),
             Self::While => "keyword `while`".to_string(),
@@ -68,8 +67,8 @@ impl Token<'_> {
             TokenType::FloatLit => format!("float `{}`", unsafe { self.lit.unwrap().float_num }),
             TokenType::StringLit => format!("string `\"{}\"`", self.lex),
             TokenType::Identifier => format!("identifier `{}`", self.lex),
-            TokenType::Let | TokenType::Var
-            | TokenType::If | TokenType::Else | TokenType::While
+            TokenType::Let | TokenType::If 
+            | TokenType::Else | TokenType::While
             | TokenType::For | TokenType::In => format!("reserved keyword `{}`", self.lex),
             _ => format!("`{}`", self.lex),
         }

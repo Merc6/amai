@@ -4,10 +4,15 @@ use std::{collections::HashMap, path::PathBuf};
 use crate::{common::{Operator, Span}, diagnostic::Diagnostic, parser::{ast::*, ftypes::*}};
 use types::*;
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Context {
+    Root,
+    FunctionDecl,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Symbol {
     pub ty: Type,
-    pub mutability: bool,
     pub is_unitialized: bool,
     defined_at: Span,
 }
@@ -16,6 +21,7 @@ pub struct SemanticChecker {
     path: PathBuf,
     symbols: Vec<HashMap<String, Symbol>>,
     type_registry: HashMap<String, Type>,
+    context: Context,
 }
 
 impl SemanticChecker {
@@ -23,7 +29,8 @@ impl SemanticChecker {
         let mut t = SemanticChecker {
             path,
             symbols: vec![HashMap::new()],
-            type_registry: HashMap::new()
+            type_registry: HashMap::new(),
+            context: Context::Root,
         };
 
         t.type_registry.insert("int".to_string(), Type::Int);
@@ -38,13 +45,12 @@ impl SemanticChecker {
         &mut self,
         name: &str,
         ty: Type,
-        mutability: bool,
         is_unitialized: bool,
         defined_at: Span,
     ) {
         self.symbols.last_mut()
             .unwrap()
-            .insert(name.to_string(), Symbol { ty, mutability, is_unitialized, defined_at });
+            .insert(name.to_string(), Symbol { ty, is_unitialized, defined_at });
     }
 
     pub fn mutate_symbol(
@@ -55,16 +61,6 @@ impl SemanticChecker {
     ) -> Result<(), Diagnostic> {
         for scope in self.symbols.iter_mut().rev() {
             if let Some(symbol) = scope.get_mut(name) {
-                if !symbol.mutability || !symbol.is_unitialized {
-                    return Err(
-                        Diagnostic::new(
-                            self.path.display(),
-                            format!("Variable `{name}` is immutable"),
-                            span,
-                        ).with_secondary_message(Some("Variable was defined here:"), symbol.defined_at.clone())
-                    );
-                }
-
                 if symbol.ty == Type::Unknown {
                     symbol.ty = ty.clone();
                     symbol.is_unitialized = false;
@@ -127,7 +123,7 @@ impl SemanticChecker {
                     Some(ty) => Box::new(self.resolve_type(ty)?),
                     None => Box::new(Type::Unit),
                 };
-                self.define_symbol(name, Type::Func(params_ty, return_ty), false, false, node.span);
+                self.define_symbol(name, Type::Func(params_ty, return_ty), false, node.span);
             },
             _ => {},
         }
@@ -145,7 +141,7 @@ impl SemanticChecker {
                     Some(ty) => Box::new(self.resolve_type(ty)?),
                     None => Box::new(Type::Unit),
                 };
-                self.define_symbol(name, Type::Func(params_ty, return_ty), false, false, node.span);
+                self.define_symbol(name, Type::Func(params_ty, return_ty), false, node.span);
             },
             ASTNodeType::Semi(s) => self.collect_function_deep(s)?,
             _ => {},
@@ -181,19 +177,59 @@ impl SemanticChecker {
             self.collect_function(node).map_err(|err| vec![err])?;
         }
         match &mut node.ty {
-            ASTNodeType::IntLit(_) => Ok(Type::Int),
-            ASTNodeType::FloatLit(_) => Ok(Type::Float),
-            ASTNodeType::StringLit(_) => Ok(Type::String),
-            ASTNodeType::Boolean(_) => Ok(Type::Bool),
-            ASTNodeType::Identifier(s) => self
-                .find_symbol(s, node.span.clone())
-                .map(|sy| sy.ty.clone())
-                .map_err(|err| vec![err]),
+            ASTNodeType::IntLit(_) => if self.context != Context::Root {
+                Ok(Type::Int)
+            } else {
+                Err(vec![Diagnostic::new(
+                    self.path.display(),
+                    format!("Integer literals can't be a root-level item"),
+                    node.span
+                )])
+            },
+            ASTNodeType::FloatLit(_) => if self.context != Context::Root {
+                Ok(Type::Float)
+            } else {
+                Err(vec![Diagnostic::new(
+                    self.path.display(),
+                    format!("Float literals can't be a root-level item"),
+                    node.span
+                )])
+            },
+            ASTNodeType::StringLit(_) => if self.context != Context::Root {
+                Ok(Type::String)
+            } else {
+                Err(vec![Diagnostic::new(
+                    self.path.display(),
+                    format!("String literals can't be a root-level item"),
+                    node.span
+                )])
+            },
+            ASTNodeType::Boolean(_) => if self.context != Context::Root {
+                Ok(Type::Bool)
+            } else {
+                Err(vec![Diagnostic::new(
+                    self.path.display(),
+                    format!("Booleans can't be a root-level item"),
+                    node.span
+                )])
+            },
+            ASTNodeType::Identifier(s) => if self.context != Context::Root {
+                self
+                    .find_symbol(s, node.span.clone())
+                    .map(|sy| sy.ty.clone())
+                    .map_err(|err| vec![err])
+            } else {
+                Err(vec![Diagnostic::new(
+                    self.path.display(),
+                    format!("Identifiers can't be a root-level item"),
+                    node.span
+                )])
+            },
             ASTNodeType::Semi(stmt) => {
                 self.validate_node(stmt, false, true)?;
                 Ok(Type::Unit)
             },
-            ASTNodeType::Block(stmts) => {
+            ASTNodeType::Block(stmts) => if self.context != Context::Root {
                 let mut last_ty = Type::Unit;
 
                 for stmt in &*stmts {
@@ -204,9 +240,23 @@ impl SemanticChecker {
                 }
 
                 Ok(last_ty)
+            } else {
+                Err(vec![Diagnostic::new(
+                    self.path.display(),
+                    format!("Blocks can't be a root-level item"),
+                    node.span
+                )])
             },
-            ASTNodeType::Unit => Ok(Type::Unit),
-            ASTNodeType::BinaryOp { op, lhs, rhs, op_tys } => {
+            ASTNodeType::Unit => if self.context != Context::Root {
+                Ok(Type::Unit)
+            } else {
+                Err(vec![Diagnostic::new(
+                    self.path.display(),
+                    format!("Units can't be a root-level item"),
+                    node.span
+                )])
+            },
+            ASTNodeType::BinaryOp { op, lhs, rhs, op_tys } => if self.context != Context::Root {
                 if [
                     Operator::Assign,
                     Operator::PlusAssign,
@@ -266,8 +316,14 @@ impl SemanticChecker {
                         )]
                     )
                 }
+            } else {
+                Err(vec![Diagnostic::new(
+                    self.path.display(),
+                    format!("Binary operations can't be a root-level item"),
+                    node.span
+                )])
             },
-            ASTNodeType::UnaryOp { op, operand, op_ty} => {
+            ASTNodeType::UnaryOp { op, operand, op_ty} => if self.context != Context::Root {
                 let operand_ty = self.validate_node(operand, true, true)?;
 
                 if let Some(output) = op.prefix_output(&operand_ty) {
@@ -286,51 +342,14 @@ impl SemanticChecker {
                         )]
                     )
                 }
+            } else {
+                Err(vec![Diagnostic::new(
+                    self.path.display(),
+                    format!("Unary operations can't be a root-level item"),
+                    node.span
+                )])
             },
-            ASTNodeType::LetDecl { name, ty, init } => {
-                let mut var_ty = if let Some(ty) = ty {
-                    self.resolve_type(ty).map_err(|err| vec![err])?
-                } else {
-                    Type::Unknown
-                };
-                if let Some(i) = init {
-                    let init_ty = self.validate_node(i, true, true)?;
-                    if var_ty == Type::Unknown {
-                        var_ty = init_ty.clone();
-                    }
-                    if init_ty != var_ty {
-                        return Err(
-                            vec![Diagnostic::new(
-                                self.path.display(),
-                                format!(
-                                    "Variable `{name}` is declared as `{}` but initialized as `{}`",
-                                    var_ty.display(),
-                                    init_ty.display(),
-                                ),
-                                i.span.clone(),
-                            )]
-                        )
-                    }
-                    self.define_symbol(
-                        name,
-                        var_ty,
-                        false,
-                        true,
-                        node.span
-                    );
-                } else {
-                    self.define_symbol(
-                        name,
-                        var_ty,
-                        false,
-                        false,
-                        node.span
-                    );
-                }
-
-                Ok(Type::Unit)
-            },
-            ASTNodeType::VarDecl { name, ty, init } => {
+            ASTNodeType::LetDecl { name, ty, init } => if self.context != Context::Root {
                 let mut var_ty = if let Some(ty) = ty {
                     self.resolve_type(ty).map_err(|err| vec![err])?
                 } else {
@@ -358,22 +377,26 @@ impl SemanticChecker {
                         name,
                         var_ty,
                         true,
-                        true,
                         node.span
                     );
                 } else {
                     self.define_symbol(
                         name,
                         var_ty,
-                        true,
                         false,
                         node.span
                     );
                 }
 
                 Ok(Type::Unit)
+            } else {
+                Err(vec![Diagnostic::new(
+                    self.path.display(),
+                    format!("Variable declarations can't be a root-level item"),
+                    node.span
+                )])
             },
-            ASTNodeType::If { condition, then_body, else_body } => {
+            ASTNodeType::If { condition, then_body, else_body } => if self.context != Context::Root {
                 let mut errors = Vec::new();
                 let _ = self.validate_node(condition, true, true)
                     .inspect_err(|err| errors.extend(err.clone()))
@@ -425,8 +448,14 @@ impl SemanticChecker {
                 } else {
                     Ok(Type::Unit)
                 }
+            } else {
+                Err(vec![Diagnostic::new(
+                    self.path.display(),
+                    format!("`if` conditionals can't be a root-level item"),
+                    node.span
+                )])
             },
-            ASTNodeType::While { condition, body } => {
+            ASTNodeType::While { condition, body } => if self.context != Context::Root {
                 let mut errors = Vec::new();
                 let cond_ty = self.validate_node(condition, true, true)?;
                 if cond_ty != Type::Bool {
@@ -444,6 +473,12 @@ impl SemanticChecker {
                 if !errors.is_empty() { return Err(errors) }
                 self.symbols.pop();
                 Ok(Type::Unit)
+            } else {
+                Err(vec![Diagnostic::new(
+                    self.path.display(),
+                    format!("`while` loops can't be a root-level item"),
+                    node.span
+                )])
             },
             ASTNodeType::FunDef { name, params, return_ty, body } => {
                 let mut scope = HashMap::new();
@@ -451,12 +486,13 @@ impl SemanticChecker {
                     scope.insert(name.clone(),
                         Symbol {
                             ty: self.resolve_type(ty).map_err(|err| vec![err])?,
-                            mutability: false,
                             is_unitialized: false,
                             defined_at: *span
                         });
                 }
                 self.symbols.push(scope);
+                let previous = self.context;
+                self.context = Context::FunctionDecl;
                 let body_ty = self.validate_node(body, true, true)?;
                 let return_ty = return_ty.as_ref()
                     .map(|ty| self.resolve_type(ty))
@@ -474,9 +510,10 @@ impl SemanticChecker {
                     )]);
                 }
                 self.symbols.pop();
+                self.context = previous;
                 Ok(return_ty)
             },
-            ASTNodeType::FunCall { callee, args } => {
+            ASTNodeType::FunCall { callee, args } => if self.context != Context::Root {
                 let symbol = self.find_symbol(&callee, node.span).map_err(|err| vec![err])?.clone();
                 if let Type::Func(params_ty, ty) = symbol.ty {
                     for (i, arg) in args.iter_mut().enumerate() {
@@ -497,6 +534,12 @@ impl SemanticChecker {
                 } else {
                     Err(vec![Diagnostic::new(self.path.display(), format!("Identifier {callee} is not a function"), node.span)])
                 }
+            } else {
+                Err(vec![Diagnostic::new(
+                    self.path.display(),
+                    format!("Function calls can't be a root-level item"),
+                    node.span
+                )])
             },
         }
     }

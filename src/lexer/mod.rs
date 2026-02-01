@@ -61,7 +61,6 @@ fn parse_float(string: &str) -> Option<f64> {
 fn classify<'lex>(lex: &'lex str, span: Span) -> Option<Token<'lex>> {
     let (ty, lit) = match lex {
         "let" => (TokenType::Let, None),
-        "var" => (TokenType::Var, None),
         "if" => (TokenType::If, None),
         "else" => (TokenType::Else, None),
         "while" => (TokenType::While, None),
@@ -232,8 +231,8 @@ pub fn lex<'lex>(path: &str, source: &'lex str) -> Result<Box<[Token<'lex>]>, Di
 
                 tok_start = pos;
 
-                if ch == '/' {
-                    if let Some((_, '/')) = chars.peek() {
+                if ch == '-' {
+                    if let Some((_, '-')) = chars.peek() {
                         chars.next();
                         let mut pos = 0;
                         while let Some((p, ch)) = chars.next() {
@@ -242,13 +241,16 @@ pub fn lex<'lex>(path: &str, source: &'lex str) -> Result<Box<[Token<'lex>]>, Di
                         tok_start = pos+1;
                         continue;
                     }
-                    if let Some((_, '*')) = chars.peek() {
+                }
+
+                if ch == '{' {
+                    if let Some((_, '-')) = chars.peek() {
                         chars.next();
                         let mut terminated = false;
                         let mut pos = 0;
                         while let Some((p, ch)) = chars.next() {
-                            if ch == '*' {
-                                if let Some((_, '/')) = chars.peek() {
+                            if ch == '-' {
+                                if let Some((_, '}')) = chars.peek() {
                                     terminated = true;
                                     chars.next();
                                     pos = p;
@@ -265,7 +267,7 @@ pub fn lex<'lex>(path: &str, source: &'lex str) -> Result<Box<[Token<'lex>]>, Di
                                 )
                             );
                         }
-                        tok_start = pos+1;
+                        tok_start = pos+2;
                         continue;
                     }
                 }
@@ -310,6 +312,16 @@ pub fn lex<'lex>(path: &str, source: &'lex str) -> Result<Box<[Token<'lex>]>, Di
                 tok_start = pos + 1;
             }
         }
+    }
+
+    if in_string {
+        return Err(
+            Diagnostic::new(
+                path,
+                format!("Unterminated string literal: `{:?}`", &source[(tok_start + 1)..len]),
+                Span::from(tok_start..len)
+            )
+        );
     }
 
     if tok_start < len {

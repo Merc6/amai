@@ -207,7 +207,6 @@ impl<'p> Parser<'p> {
             },
             TokenType::LCurly => self.parse_block(),
             TokenType::Let => self.parse_let(),
-            TokenType::Var => self.parse_var(),
             TokenType::If => self.parse_if(),
             TokenType::While => self.parse_while(),
             _ => Err(Diagnostic::new(
@@ -295,39 +294,6 @@ impl<'p> Parser<'p> {
 
         Ok(ASTNode {
             ty: ASTNodeType::LetDecl {
-                name, ty,
-                init: init.map(|expr| Box::new(expr))
-            },
-            span: stmt_span,
-        })
-    }
-
-    fn parse_var(&mut self) -> Result<ASTNode, Diagnostic> {
-        let mut stmt_span = self.tokens.get(self.pos).unwrap().span.clone();
-        self.pos += 1;
-
-        let ident = self.expect(TokenType::Identifier)?;
-        let name = ident.lex.to_string();
-        stmt_span.end = ident.span.end;
-
-        let ty = if self.expect(TokenType::Colon).is_ok() {
-            let expr = self.parse_type()?;
-            stmt_span.end = expr.span.end;
-            Some(expr)
-        } else {
-            None
-        };
-
-        let init = if self.expect(TokenType::Operator(Operator::Assign)).is_ok() {
-            let expr = self.parse_expr(0)?;
-            stmt_span.end = expr.span.end;
-            Some(expr)
-        } else {
-            None
-        };
-
-        Ok(ASTNode {
-            ty: ASTNodeType::VarDecl {
                 name, ty,
                 init: init.map(|expr| Box::new(expr))
             },
@@ -483,7 +449,7 @@ impl<'p> Parser<'p> {
         }
     }*/
 
-    fn expect(&mut self, expected: TokenType) -> Result<Token, Diagnostic> {
+    fn expect(&mut self, expected: TokenType) -> Result<Token<'p>, Diagnostic> {
         if let Some(token) = self.tokens.get(self.pos).cloned() {
             if token.ty == expected {
                 self.pos += 1;

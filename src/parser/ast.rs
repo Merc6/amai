@@ -35,11 +35,6 @@ pub enum ASTNodeType {
         ty: Option<FrontendType>,
         init: Option<Box<ASTNode>>,
     },
-    VarDecl {
-        name: String,
-        ty: Option<FrontendType>,
-        init: Option<Box<ASTNode>>,
-    },
     If {
         condition: Box<ASTNode>,
         then_body: Box<ASTNode>,

@@ -334,8 +334,7 @@ impl ASTCompiler {
                     _ => unreachable!()
                 }
             },
-            ASTNodeType::LetDecl { name, ty: _, init }
-            | ASTNodeType::VarDecl { name, ty: _, init } => {
+            ASTNodeType::LetDecl { name, ty: _, init } => {
                 let func = self.functions.get_mut(self.current_function).unwrap();
                 let (scope, next_available, sc_id) = func.scope.last_mut().unwrap();
                 let reg = *next_available;
