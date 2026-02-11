@@ -1,4 +1,4 @@
-use crate::common::Span;
+use amaic_core::Span;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum PatternLiteral {
