@@ -1,8 +1,93 @@
-[package]
-name = "amai"
-version = "0.0.1"
+cargo-features = ["codegen-backend", "panic-immediate-abort"]
+
+## Workspace... ##
+
+[workspace]
+resolver = "3"
+members = [
+    "crates/*",
+]
+
+[workspace.dependencies]
+derive_more = { version = "2", features = ["full"] }
+thiserror = "2.0"
+
+[workspace.package]
+version = "0.1.0"
 edition = "2024"
 
-[dependencies]
-clap = { version = "4.5.54", features = ["derive"] }
-colored = "3.0.0"
+## Lints... ##
+
+[workspace.lints.rust]
+missing_docs = "warn"
+
+[workspace.lints.clippy.pedantic]
+level = "warn"
+priority = -1
+[workspace.lints.clippy.nursery]
+level = "warn"
+priority = -1
+[workspace.lints.clippy.suspicious]
+level = "warn"
+priority = -1
+[workspace.lints.clippy.complexity]
+level = "warn"
+priority = -1
+[workspace.lints.clippy.perf]
+level = "warn"
+priority = -1
+[workspace.lints.clippy.restriction]
+level = "warn"
+priority = -1
+
+[workspace.lints.clippy]
+blanket_clippy_restriction_lints = "allow"
+alloc_instead_of_core = "allow"
+as_conversions = "allow"
+big_endian_bytes = "allow"
+create_dir = "allow"
+disallowed_script_idents = "allow"
+expect_used = "allow"
+float_arithmetic = "allow"
+host_endian_bytes = "allow"
+impl_trait_in_params = "allow"
+implicit_return = "allow"
+index_slicing = "allow"
+inline_asm_x86_intel_syntax = "allow"
+iter_over_hash_type = "allow"
+little_endian_bytes = "allow"
+missing_inline_in_public_items = "allow"
+missing_trait_methods = "allow"
+mod_module_files = "allow"
+modulo_arithmetic = "allow"
+non_ascii_literal = "allow"
+pub_use = "allow"
+pub_with_shorthand = "allow"
+question_mark_used = "allow"
+ref_patterns = "allow"
+semicolon_outside_block = "allow"
+separated_literal_suffix = "allow"
+shadow_reuse = "allow"
+single_call_fn = "allow"
+std_instead_of_alloc = "allow"
+std_instead_of_core = "allow"
+suspicious_xor_used_as_pow = "allow"
+unreachable = "allow"
+unwrap_in_result = "allow"
+wildcard_enum_match_arm = "allow"
+
+## Profiles... ##
+
+[profile.release]
+opt-level = 3
+debug = 0
+strip = true
+overflow-checks = false
+lto = "fat"
+panic = "immediate-abort"
+incremental = false
+codegen-units = 1
+
+[profile.dev]
+opt-level = 1
+codegen-backend = "cranelift"
