@@ -1,0 +1,10 @@
+[package]
+name = "amaic_vm"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+amaic_core.path = "../amaic_core"
+
+[lints]
+workspace = true

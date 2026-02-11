@@ -1,0 +1,11 @@
+[package]
+name = "amaic_ast"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+amaic_core.path = "../amaic_core"
+amaic_lexer.path = "../amaic_lexer"
+
+[lints]
+workspace = true

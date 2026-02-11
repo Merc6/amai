@@ -1,0 +1,11 @@
+[package]
+name = "amaic_core"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+colored = "3.1.1"
+derive_more.workspace = true
+
+[lints]
+workspace = true

@@ -1,7 +1,15 @@
+mod ftypes;
+mod pattern;
+mod types;
+
+use amaic_core::Span;
+use amaic_lexer::Operator;
+
 use std::path::PathBuf;
 
-use crate::{common::*, semantic_checker::types::Type};
-use super::ftypes::FrontendType;
+pub use ftypes::*;
+pub use pattern::*;
+pub use types::*;
 
 #[derive(Debug, Clone)]
 pub struct ASTModule {

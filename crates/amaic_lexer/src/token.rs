@@ -1,15 +1,42 @@
-use crate::common::{Operator, Span};
+use amaic_core::Span;
+
 use std::fmt;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum TokenType {
-    IntLit, FloatLit, StringLit, Operator(Operator),
+    IntLit,
+    FloatLit,
+    StringLit,
+    Operator(crate::Operator),
     Identifier,
-    Let, If, Else, While, For, In, Return, Extern, Export, Do, Then, With,
-    True, False,
-    LParen, RParen, LSquare, RSquare, LCurly, RCurly,
-    Semicolon, Colon, Comma, Dot, QuestionMark, Hashtag,
-    At, Arrow,
+    Let,
+    If,
+    Else,
+    While,
+    For,
+    In,
+    Return,
+    Extern,
+    Export,
+    Do,
+    Then,
+    With,
+    True,
+    False,
+    LParen,
+    RParen,
+    LSquare,
+    RSquare,
+    LCurly,
+    RCurly,
+    Semicolon,
+    Colon,
+    Comma,
+    Dot,
+    QuestionMark,
+    Hashtag,
+    At,
+    Arrow,
 }
 
 impl TokenType {
@@ -67,9 +94,12 @@ impl Token<'_> {
             TokenType::FloatLit => format!("float `{}`", unsafe { self.lit.unwrap().float_num }),
             TokenType::StringLit => format!("string `\"{}\"`", self.lex),
             TokenType::Identifier => format!("identifier `{}`", self.lex),
-            TokenType::Let | TokenType::If 
-            | TokenType::Else | TokenType::While
-            | TokenType::For | TokenType::In => format!("reserved keyword `{}`", self.lex),
+            TokenType::Let
+            | TokenType::If
+            | TokenType::Else
+            | TokenType::While
+            | TokenType::For
+            | TokenType::In => format!("reserved keyword `{}`", self.lex),
             _ => format!("`{}`", self.lex),
         }
     }
@@ -79,7 +109,9 @@ impl fmt::Debug for Token<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.ty {
             TokenType::IntLit => write!(f, "IntLit({})", unsafe { self.lit.unwrap().int_num }),
-            TokenType::FloatLit => write!(f, "FloatLit({})", unsafe { self.lit.unwrap().float_num }),
+            TokenType::FloatLit => {
+                write!(f, "FloatLit({})", unsafe { self.lit.unwrap().float_num })
+            }
             TokenType::StringLit => write!(f, "StringLit(\"{}\")", self.lex),
             TokenType::Identifier => write!(f, "Identifier(`{}`)", self.lex),
             _ => write!(f, "{:?}", self.ty),
