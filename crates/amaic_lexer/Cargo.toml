@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
-amaic_core.path = "../amaic_core"
+logos = "0.16"
 
 [lints]
 workspace = true
