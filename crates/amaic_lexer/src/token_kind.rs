@@ -1,11 +1,14 @@
 //! See [`TokenKind`].
 
+use crate::error::LexError;
+
 use logos::Logos;
 use std::fmt::{self, Display, Formatter};
 
 /// Tokens that are produced by the [`Lexer`](crate::AmaicLexer).
 #[derive(Clone, Copy, Debug, Eq, Hash, Logos, PartialEq)]
 #[logos(skip r"[ \t\r\n]+")]
+#[logos(error(LexError, LexError::from))]
 #[repr(u8)]
 #[non_exhaustive] // non-exhaustive until language stabilizes
 pub enum TokenKind {

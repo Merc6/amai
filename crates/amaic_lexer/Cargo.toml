@@ -5,6 +5,7 @@ edition.workspace = true
 
 [dependencies]
 logos = "0.16"
+thiserror.workspace = true
 
 [lints]
 workspace = true
